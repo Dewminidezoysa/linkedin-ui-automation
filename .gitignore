@@ -1,0 +1,12 @@
+target/
+*.class
+.vscode/
+.idea/
+*.iml
+.env
+.env.*
+!.env.example
+credentials.properties
+evidence/
+*.mp4
+*.webm
