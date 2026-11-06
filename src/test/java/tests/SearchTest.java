@@ -5,12 +5,17 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+
+import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TakesScreenshot;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.Assert;
 import org.testng.annotations.Test;
+
 import pages.LoginPage;
 import pages.SearchPage;
 
@@ -23,9 +28,11 @@ public class SearchTest extends BaseTest {
         Assert.assertNotNull(
             email, "Set LINKEDIN_EMAIL before running."
         );
+
         Assert.assertNotNull(
             password, "Set LINKEDIN_PASSWORD before running."
         );
+
         Assert.assertFalse(email.isBlank(), "Email is empty.");
         Assert.assertFalse(password.isBlank(), "Password is empty.");
 
@@ -37,29 +44,86 @@ public class SearchTest extends BaseTest {
             .until(ExpectedConditions.urlMatches(
                 "^https://www\\.linkedin\\.com/feed(?:/|\\?|$).*"
             ));
+
+        System.out.println("STEP: Login completed.");
     }
 
-    private void captureScreenshot(String name) throws Exception {
-        Path screenshot = Path.of(
-            "evidence",
-            name + "-" + System.currentTimeMillis() + ".png"
+    private void captureScreenshot(String name) {
+        try {
+            Path screenshot = Path.of(
+                "evidence",
+                name + "-" + System.currentTimeMillis() + ".png"
+            );
+
+            Files.createDirectories(screenshot.getParent());
+
+            Files.write(
+                screenshot,
+                ((TakesScreenshot) driver)
+                    .getScreenshotAs(OutputType.BYTES)
+            );
+
+            System.out.println(
+                "Screenshot saved: " + screenshot.toAbsolutePath()
+            );
+
+        } catch (Exception exception) {
+            System.err.println(
+                "Screenshot could not be saved: "
+                + exception.getMessage()
+            );
+        }
+    }
+
+    private boolean isMicrosoftCompanyPage() {
+        URI url = URI.create(driver.getCurrentUrl());
+
+        return "www.linkedin.com".equals(url.getHost())
+            && url.getPath().matches(
+                "/company/microsoft(?:/.*)?"
+            );
+    }
+
+    private void waitForCompanyContent() {
+        By companyName = By.xpath(
+            "//*[self::h1 or self::h2 or @role='heading']"
+            + "[normalize-space(.)='Microsoft']"
+            + " | //main//p[normalize-space(.)='Microsoft']"
         );
 
-        Files.createDirectories(screenshot.getParent());
+        new WebDriverWait(driver, Duration.ofSeconds(60))
+            .withMessage(
+                "Microsoft's URL opened, but its company name "
+                + "did not become visible in the page content."
+            )
+            .until(browser -> {
+                if (!isMicrosoftCompanyPage()) {
+                    return false;
+                }
 
-        Files.write(
-            screenshot,
-            ((TakesScreenshot) driver)
-                .getScreenshotAs(OutputType.BYTES)
-        );
+                try {
+                    for (WebElement element :
+                            browser.findElements(companyName)) {
+
+                        if (element.isDisplayed()) {
+                            return true;
+                        }
+                    }
+
+                } catch (StaleElementReferenceException exception) {
+                    return false;
+                }
+
+                return false;
+            });
 
         System.out.println(
-            "Screenshot saved: " + screenshot.toAbsolutePath()
+            "STEP: Microsoft company content is visible."
         );
     }
 
     @Test
-    public void searchDisplaysResults() throws Exception {
+    public void searchDisplaysResults() {
         try {
             loginToLinkedIn();
 
@@ -73,7 +137,7 @@ public class SearchTest extends BaseTest {
 
             Assert.assertTrue(
                 searchPage.isResultVisible(),
-                "A visible search result should appear."
+                "A visible company result should appear."
             );
 
             System.out.println("Search test passed.");
@@ -84,8 +148,12 @@ public class SearchTest extends BaseTest {
     }
 
     @Test
-    public void firstResultOpensCompanyPage() throws Exception {
+    public void firstResultOpensCompanyPage() {
         try {
+            System.out.println(
+                "TASK 4: Starting result-opening test."
+            );
+
             loginToLinkedIn();
 
             SearchPage searchPage = new SearchPage(driver);
@@ -93,31 +161,42 @@ public class SearchTest extends BaseTest {
 
             Assert.assertTrue(
                 searchPage.isResultVisible(),
-                "A visible result should appear before clicking."
+                "A visible company result should appear before clicking."
             );
+
+            captureScreenshot("task4-before-click");
 
             searchPage.openFirstResult();
 
             new WebDriverWait(driver, Duration.ofSeconds(30))
-                .until(browser -> {
-                    URI url = URI.create(browser.getCurrentUrl());
+                .withMessage(
+                    "The clicked result did not open "
+                    + "Microsoft's company URL."
+                )
+                .until(browser -> isMicrosoftCompanyPage());
 
-                    return "www.linkedin.com".equals(url.getHost())
-                        && url.getPath().matches(
-                            "/company/microsoft(?:/.*)?"
-                        );
-                });
+            // Wait for rendered company content, not just a URL change.
+            waitForCompanyContent();
 
             Assert.assertTrue(
-                URI.create(driver.getCurrentUrl()).getPath()
-                    .matches("/company/microsoft(?:/.*)?"),
-                "The first result should open Microsoft's company page."
+                isMicrosoftCompanyPage(),
+                "Expected Microsoft's company URL, but opened: "
+                + driver.getCurrentUrl()
             );
 
-            System.out.println("Open-result test passed.");
+            System.out.println(
+                "TASK 4 PASSED: Microsoft company URL "
+                + "and visible company content verified."
+            );
 
         } finally {
-            captureScreenshot("opened-company");
+            if (driver != null) {
+                System.out.println(
+                    "TASK 4 final URL: " + driver.getCurrentUrl()
+                );
+
+                captureScreenshot("opened-company");
+            }
         }
     }
 }

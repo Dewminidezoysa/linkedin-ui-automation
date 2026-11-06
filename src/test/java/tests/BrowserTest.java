@@ -2,11 +2,14 @@ package tests;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -17,63 +20,80 @@ public class BrowserTest extends BaseTest {
     @Test
     public void loginPageLoads() throws Exception {
         try {
-            driver.get("https://www.linkedin.com/login");
+            driver.get("https://www.linkedin.com/login/");
 
-           WebElement usernameField = wait.until(browser -> {
-    for (WebElement field : browser.findElements(
-            By.cssSelector("input[type='email']"))) {
+            System.out.println(
+                "Waiting for the LinkedIn login form. "
+                + "If verification is requested, complete it manually."
+            );
 
-        if (field.isDisplayed() && field.isEnabled()) {
-            return field;
-        }
-    }
+            WebElement usernameField =
+                new WebDriverWait(driver, Duration.ofSeconds(60))
+                    .withMessage(() ->
+                        "The login email field did not become visible. "
+                        + "Page title: " + driver.getTitle()
+                        + ". URL: " + driver.getCurrentUrl()
+                    )
+                    .until(browser -> {
+                        try {
+                            for (WebElement field :
+                                    browser.findElements(
+                                        By.cssSelector(
+                                            "input[type='email'], "
+                                            + "input#username"
+                                        )
+                                    )) {
 
-    return null;
-});
+                                if (field.isDisplayed()
+                                        && field.isEnabled()) {
+                                    return field;
+                                }
+                            }
+                        } catch (
+                            StaleElementReferenceException exception
+                        ) {
+                            // The page changed; check again.
+                            return null;
+                        }
+
+                        return null;
+                    });
 
             Assert.assertTrue(
                 usernameField.isDisplayed(),
                 "The LinkedIn username field should be visible."
             );
 
-            System.out.println("LinkedIn login page loaded successfully.");
+            System.out.println(
+                "Browser-check test passed: login field is visible."
+            );
 
         } finally {
-            System.out.println("Page URL: " + driver.getCurrentUrl());
-            System.out.println("Page title: " + driver.getTitle());
             System.out.println(
-    "Email fields found: " +
-    driver.findElements(By.cssSelector("input[type='email']")).size()
-);
-
-for (WebElement input : driver.findElements(By.tagName("input"))) {
-    System.out.println(
-        "INPUT: type=" + input.getAttribute("type")
-        + ", id=" + input.getAttribute("id")
-        + ", name=" + input.getAttribute("name")
-        + ", visible=" + input.isDisplayed()
-    );
-}
-
-System.out.println(
-    "Frames found: " +
-    driver.findElements(By.cssSelector("iframe, frame")).size()
-);
+                "Page URL: " + driver.getCurrentUrl()
+            );
+            System.out.println(
+                "Page title: " + driver.getTitle()
+            );
 
             Path screenshot = Path.of(
                 "evidence",
-                "browser-check-" + System.currentTimeMillis() + ".png"
+                "browser-check-"
+                    + System.currentTimeMillis()
+                    + ".png"
             );
 
             Files.createDirectories(screenshot.getParent());
 
-            byte[] image = ((TakesScreenshot) driver)
-                .getScreenshotAs(OutputType.BYTES);
-
-            Files.write(screenshot, image);
+            Files.write(
+                screenshot,
+                ((TakesScreenshot) driver)
+                    .getScreenshotAs(OutputType.BYTES)
+            );
 
             System.out.println(
-                "Screenshot saved: " + screenshot.toAbsolutePath()
+                "Screenshot saved: "
+                    + screenshot.toAbsolutePath()
             );
         }
     }
